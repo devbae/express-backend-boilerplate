@@ -7,9 +7,9 @@ const LocalStrategy = require('passport-local')
 const session = require("express-session")
 const bodyParser = require("body-parser")
 const bcrypt = require('bcryptjs')
-
+const GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
 const User = require('./models/user.js')
-
+var uuidv4 = require('uuid-random');
 
 //===============EXPRESS=================
 const app = express();
@@ -28,18 +28,20 @@ app.set('view engine', 'handlebars');
 
 //===============PASSPORT=================
 passport.serializeUser(function (user, done) {
-  console.log("serializing " + user.username);
-  done(null, user);
+  console.log("serializing " + user.userId);
+  done(null, user.userId);
 });
 
-passport.deserializeUser(function (obj, done) {
-  console.log("deserializing " + obj);
-  done(null, obj);
+passport.deserializeUser(function (id, done) {
+  var user = User.findOne({userId: id})
+  // console.log("deserializing " + obj);
+  done(null, user);
 });
 
 passport.use('local-sign-in', new LocalStrategy(
   {
     usernameField: 'email',
+    passwordField: 'password',
     passReqToCallback: true
   },
   async (req, username, password, done) => {
@@ -63,13 +65,14 @@ passport.use('local-sign-in', new LocalStrategy(
 
 passport.use('local-signup', new LocalStrategy(
   {
-    usernameField: 'email',
+    usernameField: 'email-reg',
+    passwordField: 'password-reg',
     passReqToCallback: true
   },
   async (req, username, password, done) => {
     try {
       password = await bcrypt.hashSync(password, 8)
-      const user = new User({ email: username, password: password })
+      const user = new User({ email: username, password: password, userId : uuidv4() })
       await user.save()
       req.session.success = 'You are successfully registered and logged in ' + user.email + '!';
       done(null, user);
@@ -77,6 +80,21 @@ passport.use('local-signup', new LocalStrategy(
       done(e)
     }
   }
+));
+
+// Passport Google Strategy
+
+passport.use(new GoogleStrategy({
+  clientID: '',
+  clientSecret: '',
+  callbackURL: "http://localhost:3000/auth/google/callback"
+},
+async (accessToken, refreshToken, profile, done) => {
+  console.log(profile)
+  User.googleAuth(profile.id , (err, user) => {
+    return done(err, user);
+  });
+}
 ));
 
 //===============ROUTES=================
@@ -93,6 +111,25 @@ app.post('/local-reg', passport.authenticate('local-signup', {
   failureRedirect: '/signin'
 })
 );
+
+app.get('/auth/google',
+ passport.authenticate('google', {
+   scope: [
+     'https://www.googleapis.com/auth/userinfo.profile',
+     'https://www.googleapis.com/auth/userinfo.email'
+   ]
+ })
+)
+
+app.get('/auth/google/callback',
+ passport.authenticate('google', { failureRedirect: '/signin' }),
+ (req, res) => {
+   console.log("asdf");
+    return res
+     .status(200)
+     .redirect("/")
+ }
+ )
 
 app.post('/login', passport.authenticate('local-sign-in', {
   successRedirect: '/',

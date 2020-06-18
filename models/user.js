@@ -1,17 +1,18 @@
 const mongoose = require('mongoose')
 const validator = require('validator')
 const bcrypt = require('bcryptjs')
+var uuidv4 = require('uuid-random');
 
 const userSchema = new mongoose.Schema({
     password:{
         type: String,
-        required: true,
+        required: false,
         trim: true,
         minlength: 7
     },
     email:{
         type: String,
-        required: true,
+        required: false,
         trim : true,
         lowercase: true,
         unique: true,
@@ -20,6 +21,17 @@ const userSchema = new mongoose.Schema({
                 throw new Error("Email is invalid.")
             }
         }
+    }, 
+    googleId: {
+        type: String,
+        required: false,
+        unique: true
+    },
+
+    userId: {
+        type: String,
+        required: true,
+        unique: true
     }
 })
 
@@ -37,6 +49,16 @@ userSchema.statics.findByCredentials = async (email, password) => {
     }
     
     return user
+}
+
+userSchema.statics.googleAuth = async (googleId, callback) => {
+    const user = await User.findOne({googleId: googleId});
+    if(user) {
+        return callback(null, user)
+    }
+    const userCreated = new User({googleId: googleId, userId: uuidv4()})
+    userCreated.save();
+    return callback(null, userCreated)
 }
 
 // userSchema.pre('save', async function (next) {
